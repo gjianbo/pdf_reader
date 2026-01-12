@@ -52,19 +52,41 @@ dependencies:
   path_provider: ^2.1.2
   permission_handler: ^11.3.0
   
+  # UI
+  scrollable_positioned_list: ^0.3.8
+  
   # Network & Utils
   http: ^1.2.0
+  crypto: ^3.0.3
+  translator: ^1.0.0
+  webdav_client: ^1.1.0
+  uuid: ^4.3.3
 
-  
+  # TTS
+  flutter_tts: ^3.8.3
+
   # Edge TTS
   edge_tts_dart:
     git:
       url: https://github.com/gjianbo/dart_edge_tts.git
 
+  # Database
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  shared_preferences: ^2.5.4
+  wakelock_plus: ^1.4.0
+  epubx: ^4.0.0
+  flutter_widget_from_html: ^0.16.1
+  charset_converter: ^2.3.0
+  html: ^0.15.4
+  collection: ^1.19.1
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.6
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -72,18 +94,24 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.11.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
+
+
+
 # The following section is specific to Flutter packages.
 flutter:
+
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
-
+  assets:
+    - assets/icon/
   # To add assets to your application, add an assets section, like this:
   # assets:
   #   - images/a_dot_burr.jpeg

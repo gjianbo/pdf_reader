@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
 
@@ -25,7 +26,7 @@ class AudioService {
       await _player.setAudioSource(source);
       await _player.play();
     } catch (e) {
-      print("Error playing audio: $e");
+      debugPrint("Error playing audio: $e");
     }
   }
 
