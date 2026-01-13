@@ -16,22 +16,13 @@ enum TtsState { playing, paused, stopped, loading, error }
 class TtsService extends GetxService {
   final SettingsService _settings = Get.find<SettingsService>();
   
-  // Players
-  // 使用 late final 并在构造函数中初始化
-  late final AudioPlayer _audioPlayer; 
+  // 1. 移除 static 单例，完全依赖 GetX 管理
+  // static final TtsService _instance = TtsService._internal(); ...
+  
+  // 2. 将 _audioPlayer 改为 late，不在定义时初始化
+  late AudioPlayer _audioPlayer; 
   final FlutterTts _flutterTts = FlutterTts();
   
-  // 单例模式
-  static final TtsService _instance = TtsService._internal();
-  factory TtsService() => _instance;
-  
-  TtsService._internal() {
-    _audioPlayer = AudioPlayer();
-    _initAudioPlayer();
-    _initFlutterTts();
-  }
-  // EdgeTtsService _edgeTts; // Removed unused field
-
   // State
   final Rx<TtsState> state = TtsState.stopped.obs;
   final RxInt currentSentenceIndex = 0.obs;
@@ -39,20 +30,28 @@ class TtsService extends GetxService {
   // Data
   List<String> _playlist = [];
   
-  // Cache & Prefetch
-  // MD5(text + voice + rate + pitch) -> FilePath
+  // Cache
   final Map<String, String> _audioCache = {}; 
-  final int _prefetchCount = 2; // 预加载下两句
-  bool _isOnline = true; // 简单的网络状态标记 (可通过 connectivity_plus 增强)
+  final int _prefetchCount = 2;
+  bool _isOnline = true;
 
   // Sleep Timer
   Timer? _sleepTimer;
   final RxInt sleepMinutesLeft = 0.obs;
-  int? _stopAtIndex; // 播完本章的停止索引
+  int? _stopAtIndex;
 
-  // Stream Controllers
   final _completionController = StreamController<void>.broadcast();
   Stream<void> get onSentenceComplete => _completionController.stream;
+
+  // 3. 在 onInit 中初始化 Player，确保 main.dart 中的 JustAudioBackground.init 已经跑完
+  @override
+  void onInit() {
+    super.onInit();
+    debugPrint("TtsService: Initializing...");
+    _audioPlayer = AudioPlayer(); // 这里创建 Player 才是安全的
+    _initAudioPlayer();
+    _initFlutterTts();
+  }
 
   @override
   void onClose() {
@@ -62,23 +61,10 @@ class TtsService extends GetxService {
     _completionController.close();
     super.onClose();
   }
-
-/*
-  void _initEdgeTts() {
-    _edgeTts = EdgeTtsService(
-      voice: _settings.ttsVoice.value,
-      rate: _settings.ttsRate.value,
-      pitch: _settings.ttsPitch.value,
-    );
-    
-    // 监听设置变化重建 EdgeTts 实例 (如果需要)
-    // 实际播放时我们会每次检查参数，这里主要初始化默认值
-  }
-*/
-
+  
   void _initFlutterTts() async {
     await _flutterTts.setLanguage("zh-CN");
-    await _flutterTts.setSpeechRate(0.5); // FlutterTts rate is 0.0 to 1.0
+    await _flutterTts.setSpeechRate(0.5);
     await _flutterTts.setVolume(1.0);
     await _flutterTts.setPitch(1.0);
     
@@ -105,57 +91,32 @@ class TtsService extends GetxService {
   }
 
   Future<void> _onPlaybackComplete() async {
-    _completionController.add(null); // 通知外部
-    
-    // 检查是否到达预定的停止索引 (播完本章)
+    _completionController.add(null);
     if (_stopAtIndex != null && currentSentenceIndex.value >= _stopAtIndex!) {
       stop();
       return;
     }
-    
-    // 自动播放下一句
     if (currentSentenceIndex.value < _playlist.length - 1) {
-      // 这里的逻辑最好由 Controller 控制，或者在这里自动切
-      // 为了保持 Service 纯粹，我们只通知 Controller，让 Controller 调用 playNext
-      // 但为了实现"无缝"，最好在这里直接处理
-      
-      // 暂时策略：Service 只负责播放当前，通知结束，由 Controller 决定是否下一首
-      // 不过为了 0 延迟，Service 内部自动播放下一首是最高效的
-      
-      // 我们采用混合模式：自动播放下一句，并更新 index
-      // Controller 监听 currentSentenceIndex 变化来更新 UI
       await play(currentSentenceIndex.value + 1);
     } else {
       stop();
     }
   }
 
-  /// 设置播放列表
   void setPlaylist(List<String> sentences, int startIndex) {
-    // 如果播放列表相同，不打断播放
-    if (listEquals(_playlist, sentences)) {
-      // 可以在这里更新 startIndex 吗？
-      // 如果正在播放，强制跳转可能不好。
-      // 让 Controller 决定是否跳转。
-      return;
-    }
+    if (listEquals(_playlist, sentences)) return;
     _playlist = sentences;
     currentSentenceIndex.value = startIndex;
-    stop(); // 重置状态
+    stop();
   }
 
-  /// 播放指定索引的句子
   Future<void> play(int index) async {
     if (index < 0 || index >= _playlist.length) return;
-    
     currentSentenceIndex.value = index;
     state.value = TtsState.loading;
     String text = _playlist[index];
-
-    // 1. 触发预加载 (异步，不阻塞当前播放)
     _prefetchNext(index);
 
-    // 2. 尝试获取当前句子的音频
     try {
       if (_isOnline) {
         await _playOnline(text);
@@ -164,7 +125,7 @@ class TtsService extends GetxService {
       }
     } catch (e) {
       debugPrint("Online TTS failed: $e, switching to offline.");
-      _isOnline = false; // 暂时标记为离线
+      _isOnline = false;
       await _playOffline(text);
     }
   }
@@ -173,12 +134,11 @@ class TtsService extends GetxService {
     String? filePath = await _getOrDownloadAudio(text);
     if (filePath != null && File(filePath).existsSync()) {
       try {
-        // 使用 AudioSource.file 并附带 MediaItem 以支持后台播放显示
         await _audioPlayer.setAudioSource(
           AudioSource.file(
             filePath,
             tag: MediaItem(
-              id: _generateCacheKey(text), // 使用缓存 Key 作为 ID
+              id: _generateCacheKey(text),
               album: "PDF Reader TTS",
               title: text.length > 20 ? "${text.substring(0, 20)}..." : text,
               artUri: null,
@@ -188,18 +148,17 @@ class TtsService extends GetxService {
         );
         await _audioPlayer.play();
       } catch (e) {
-        debugPrint("JustAudio setAudioSource failed: $e. Maybe JustAudioBackground is not initialized yet or file error.");
+        debugPrint("JustAudio error: $e");
         rethrow;
       }
     } else {
-      throw Exception("Audio file not found or download failed");
+      throw Exception("Audio file not found");
     }
   }
 
   Future<void> _playOffline(String text) async {
-    // 停止 just_audio
     await _audioPlayer.stop();
-    state.value = TtsState.playing; // FlutterTts 状态管理较弱，手动设为 playing
+    state.value = TtsState.playing;
     await _flutterTts.speak(text);
   }
 
@@ -207,7 +166,7 @@ class TtsService extends GetxService {
     if (_audioPlayer.playing) {
       await _audioPlayer.pause();
     } else {
-      await _flutterTts.stop(); // FlutterTts pause 行为不一致，通常用 stop
+      await _flutterTts.stop();
       state.value = TtsState.paused;
     }
   }
@@ -216,13 +175,16 @@ class TtsService extends GetxService {
     if (_audioPlayer.playerState.processingState != ProcessingState.idle) {
        await _audioPlayer.play();
     } else {
-      // 如果是离线 TTS 被暂停（stop），resume 需要重头读
       play(currentSentenceIndex.value);
     }
   }
 
   Future<void> stop() async {
-    await _audioPlayer.stop();
+    try {
+      await _audioPlayer.stop();
+    } catch (e) {
+      debugPrint("Error stopping player: $e");
+    }
     await _flutterTts.stop();
     state.value = TtsState.stopped;
     _sleepTimer?.cancel();
@@ -230,20 +192,12 @@ class TtsService extends GetxService {
     _stopAtIndex = null;
   }
 
-  /// 播放指定的音频文件 (用于测试)
-  /// 复用 _audioPlayer 以避免多实例冲突
-  /// [useBackground] 是否启用后台播放控制 (Notification/LockScreen)。测试播放建议设为 false。
   Future<void> playAudioFile(File file, {bool useBackground = true}) async {
-    // 停止当前正在播放的内容
     await stop();
-    
-    // 不再手动初始化后台服务，main.dart 已处理
-    
     try {
       await _audioPlayer.setAudioSource(
         AudioSource.file(
           file.path,
-          // 如果不启用后台，tag 设为 null
           tag: useBackground ? MediaItem(
             id: 'test_tts_${DateTime.now().millisecondsSinceEpoch}',
             album: 'TTS Test',
@@ -260,56 +214,33 @@ class TtsService extends GetxService {
     }
   }
 
-  /// 预加载逻辑
   void _prefetchNext(int currentIndex) {
     for (int i = 1; i <= _prefetchCount; i++) {
       int nextIndex = currentIndex + i;
       if (nextIndex < _playlist.length) {
-        // 这里的 await 不会阻塞主线程的 play，因为 _prefetchNext 是 void async 但没被 await
-        _getOrDownloadAudio(_playlist[nextIndex]).catchError((e) {
-          debugPrint("Prefetch error for index $nextIndex: $e");
-          return null;
-        });
+        _getOrDownloadAudio(_playlist[nextIndex]).catchError((_) => null);
       }
     }
   }
 
-  /// 获取或下载音频文件
-  /// 返回本地文件路径
   Future<String?> _getOrDownloadAudio(String text) async {
-    // 生成唯一缓存 Key
     String key = _generateCacheKey(text);
-    
-    // 1. 检查内存缓存
     if (_audioCache.containsKey(key)) {
       String path = _audioCache[key]!;
-      if (File(path).existsSync()) {
-        return path;
-      } else {
-        _audioCache.remove(key);
-      }
+      if (File(path).existsSync()) return path;
     }
 
-    // 2. 检查磁盘文件 (持久化缓存)
     Directory tempDir = await getTemporaryDirectory();
     Directory cacheDir = Directory("${tempDir.path}/tts_cache");
-    if (!cacheDir.existsSync()) {
-      cacheDir.createSync();
-    }
+    if (!cacheDir.existsSync()) cacheDir.createSync();
+    
     String filePath = "${cacheDir.path}/$key.mp3";
     File file = File(filePath);
-    
     if (file.existsSync() && file.lengthSync() > 0) {
       _audioCache[key] = filePath;
       return filePath;
     }
 
-    // 3. 必须下载
-    // 确保参数是最新的
-    // 这里我们直接用一个新的 EdgeTtsService 实例或者更新参数，确保设置生效
-    // 为了性能，我们尽量复用，但 settings 可能会变。
-    // 简单起见，这里假设 settings 变更不频繁，或者在变更时我们做了其他处理。
-    // 如果需要严格一致，这里应该重新 new EdgeTtsService
     EdgeTtsService service = EdgeTtsService(
       voice: _settings.ttsVoice.value,
       rate: _settings.ttsRate.value,
@@ -317,16 +248,11 @@ class TtsService extends GetxService {
     );
 
     try {
-      // edge_tts_dart 默认生成随机文件名，我们需要移动或重命名
-      // 但 edge_tts_dart 目前的 API 可能只返回路径
       String? downloadedPath = await service.synthesizeToFile(text);
       if (downloadedPath != null) {
         File downloadedFile = File(downloadedPath);
-        await downloadedFile.copy(filePath); // 移动到我们的缓存目录并重命名
-        try {
-          downloadedFile.delete(); // 删除临时文件
-        } catch (_) {}
-        
+        await downloadedFile.copy(filePath);
+        try { downloadedFile.delete(); } catch (_) {}
         _audioCache[key] = filePath;
         return filePath;
       }
@@ -342,20 +268,14 @@ class TtsService extends GetxService {
     return md5.convert(utf8.encode(raw)).toString();
   }
 
-  void setStopAtIndex(int? index) {
-    _stopAtIndex = index;
-  }
-
-  /// 睡眠定时器
   void startSleepTimer(int minutes) {
     _sleepTimer?.cancel();
     sleepMinutesLeft.value = minutes;
-    
     _sleepTimer = Timer.periodic(const Duration(minutes: 1), (timer) {
       sleepMinutesLeft.value--;
       if (sleepMinutesLeft.value <= 0) {
         timer.cancel();
-        pause(); // 暂停播放
+        pause();
       }
     });
   }
@@ -365,7 +285,6 @@ class TtsService extends GetxService {
     sleepMinutesLeft.value = 0;
   }
   
-  /// 清理缓存
   Future<void> clearCache() async {
     try {
       Directory tempDir = await getTemporaryDirectory();
@@ -377,5 +296,9 @@ class TtsService extends GetxService {
     } catch (e) {
       debugPrint("Clear cache error: $e");
     }
+  }
+  
+  void setStopAtIndex(int? index) {
+    _stopAtIndex = index;
   }
 }
