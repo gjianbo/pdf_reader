@@ -14,48 +14,22 @@ import 'settings_service.dart';
 enum TtsState { playing, paused, stopped, loading, error }
 
 class TtsService extends GetxService {
-  static Completer<void>? _backgroundInitCompleter;
-  static bool isBackgroundInitialized = false;
-
-  /// 确保 just_audio_background 已完成初始化
-  ///
-  /// 避免在未调用初始化时触发 `LateInitializationError: Field '_audioHandler' has not been initialized`。
-  static Future<void> ensureBackgroundInitialized() async {
-    if (isBackgroundInitialized) return;
-    
-    final existing = _backgroundInitCompleter;
-    if (existing != null) return existing.future;
-
-    final completer = Completer<void>();
-    _backgroundInitCompleter = completer;
-
-    debugPrint('TtsService: Starting JustAudioBackground initialization...');
-    try {
-      await JustAudioBackground.init(
-        androidNotificationChannelId: 'com.hnwd.pdf_reader.channel.audio',
-        androidNotificationChannelName: 'PDF Reader Audio',
-        androidNotificationOngoing: true,
-      );
-      isBackgroundInitialized = true;
-      debugPrint('TtsService: JustAudioBackground initialized successfully');
-      completer.complete();
-    } catch (e, st) {
-      debugPrint('TtsService: JustAudioBackground init failed: $e');
-      // 如果初始化失败，不要标记为 true，也不要吞掉异常，
-      // 否则后续调用会因为 _audioHandler 未初始化而崩溃。
-      _backgroundInitCompleter = null;
-      completer.completeError(e, st);
-      // 这里不 rethrow，因为我们在 main.dart 里面调用时不想阻断 App 启动，
-      // 但调用者需要检查 isBackgroundInitialized 状态。
-      // 不过，为了让等待这个 Future 的调用者知道失败了，completeError 是必须的。
-    }
-  }
-
   final SettingsService _settings = Get.find<SettingsService>();
   
   // Players
-  final AudioPlayer _audioPlayer = AudioPlayer();
+  // 使用 late final 并在构造函数中初始化
+  late final AudioPlayer _audioPlayer; 
   final FlutterTts _flutterTts = FlutterTts();
+  
+  // 单例模式
+  static final TtsService _instance = TtsService._internal();
+  factory TtsService() => _instance;
+  
+  TtsService._internal() {
+    _audioPlayer = AudioPlayer();
+    _initAudioPlayer();
+    _initFlutterTts();
+  }
   // EdgeTtsService _edgeTts; // Removed unused field
 
   // State
@@ -79,14 +53,6 @@ class TtsService extends GetxService {
   // Stream Controllers
   final _completionController = StreamController<void>.broadcast();
   Stream<void> get onSentenceComplete => _completionController.stream;
-
-  @override
-  void onInit() {
-    super.onInit();
-    // _initEdgeTts(); // Not needed as we create instance on demand
-    _initFlutterTts();
-    _initAudioPlayer();
-  }
 
   @override
   void onClose() {
@@ -271,9 +237,8 @@ class TtsService extends GetxService {
     // 停止当前正在播放的内容
     await stop();
     
-    // 服保始化，即use，即使 useBackground 为 false，Background 为 false，
-    // 因为 j为 t_audio_bst_audio_ 插件一旦注册，可能需要a_audioHandlerkground 插件一旦注册，可能需要 _audioHandler
-  await ensureBackgroundInitialized();
+    // 不再手动初始化后台服务，main.dart 已处理
+    
     try {
       await _audioPlayer.setAudioSource(
         AudioSource.file(

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:get/get.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
@@ -65,6 +66,10 @@ class ReaderController extends GetxController with WidgetsBindingObserver {
 
   // UI 控制器
   final PdfViewerController pdfViewerController = PdfViewerController();
+
+  // PDF 目录相关
+  final RxList<PdfBookmark> pdfBookmarks = <PdfBookmark>[].obs;
+  PdfDocument? _pdfDocument;
   
   ReaderController({required this.book});
 
@@ -532,5 +537,34 @@ class ReaderController extends GetxController with WidgetsBindingObserver {
   
   void cancelSleepTimer() {
     _ttsService.cancelSleepTimer();
+  }
+
+  // --- PDF 目录功能 ---
+
+  /// 加载 PDF 目录
+  void loadPdfBookmarks(PdfDocument document) {
+    _pdfDocument = document;
+    pdfBookmarks.clear();
+    if (document.bookmarks.count > 0) {
+      List<PdfBookmark> bookmarks = [];
+      for (int i = 0; i < document.bookmarks.count; i++) {
+        bookmarks.add(document.bookmarks[i]);
+      }
+      pdfBookmarks.value = bookmarks;
+    }
+  }
+
+  /// 跳转到 PDF 书签
+  void jumpToBookmark(PdfBookmark bookmark) {
+    if (_pdfDocument == null) return;
+    
+    PdfDestination? dest = bookmark.destination;
+    if (dest != null) {
+      // 获取目标页面的索引
+      int index = _pdfDocument!.pages.indexOf(dest.page);
+      if (index >= 0) {
+        pdfViewerController.jumpToPage(index + 1); // jumpToPage 是 1-based
+      }
+    }
   }
 }

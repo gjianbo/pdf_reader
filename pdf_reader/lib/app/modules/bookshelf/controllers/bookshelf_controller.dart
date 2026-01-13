@@ -6,15 +6,8 @@ import '../../../data/models/category.dart';
 import '../../../services/database_service.dart';
 import '../../reader/views/reader_view.dart';
 
-import '../../../services/settings_service.dart';
-import '../../../services/webdav_service.dart';
-
 class BookshelfController extends GetxController with GetSingleTickerProviderStateMixin, WidgetsBindingObserver {
   final DatabaseService _dbService = Get.find<DatabaseService>();
-  final SettingsService _settings = Get.find<SettingsService>();
-  // WebDavService may not be initialized if we use Get.putAsync and it's slow, but usually it is ready by now.
-  // Better use Get.find<WebDavService>() carefully.
-  late WebDavService _webDavService;
   
   // 所有书籍
   final allBooks = <Book>[].obs;
@@ -31,11 +24,6 @@ class BookshelfController extends GetxController with GetSingleTickerProviderSta
   void onInit() {
     super.onInit();
     WidgetsBinding.instance.addObserver(this);
-    try {
-      _webDavService = Get.find<WebDavService>();
-    } catch (e) {
-      debugPrint("WebDavService not found: $e");
-    }
     
     loadData();
     
@@ -52,20 +40,7 @@ class BookshelfController extends GetxController with GetSingleTickerProviderSta
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused) {
-      _autoSync();
-    }
-  }
-
-  Future<void> _autoSync() async {
-    if (_settings.webdavAutoSync.value) {
-      try {
-        await _webDavService.backup();
-        debugPrint("自动备份成功");
-      } catch (e) {
-        debugPrint("自动备份失败: $e");
-      }
-    }
+    // 自动备份逻辑已移除
   }
 
   Future<void> loadData() async {

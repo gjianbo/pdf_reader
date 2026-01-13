@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:flutter_widget_from_html/flutter_widget_from_html.dart';
 
@@ -496,12 +497,13 @@ class ReaderView extends GetView<ReaderController> {
     return Drawer(
       width: 300,
       child: DefaultTabController(
-        length: 2,
+        length: 3,
         child: Column(
           children: [
             const SizedBox(height: 40),
             const TabBar(
               tabs: [
+                Tab(icon: Icon(Icons.list), text: "目录"),
                 Tab(icon: Icon(Icons.bookmark), text: "书签"),
                 Tab(icon: Icon(Icons.note), text: "笔记"),
               ],
@@ -511,6 +513,7 @@ class ReaderView extends GetView<ReaderController> {
             Expanded(
               child: TabBarView(
                 children: [
+                  _buildDirectoryList(),
                   _buildBookmarksList(),
                   _buildNotesList(),
                 ],
@@ -520,6 +523,44 @@ class ReaderView extends GetView<ReaderController> {
         ),
       ),
     );
+  }
+
+  Widget _buildDirectoryList() {
+    return Obx(() {
+      if (controller.pdfBookmarks.isEmpty) {
+        return const Center(child: Text("暂无目录", style: TextStyle(color: Colors.grey)));
+      }
+      return ListView.builder(
+        itemCount: controller.pdfBookmarks.length,
+        itemBuilder: (context, index) {
+          final bookmark = controller.pdfBookmarks[index];
+          return _buildBookmarkItem(bookmark);
+        },
+      );
+    });
+  }
+
+  Widget _buildBookmarkItem(PdfBookmark bookmark) {
+    if (bookmark.count > 0) {
+      return ExpansionTile(
+        title: GestureDetector(
+          onTap: () {
+            controller.jumpToBookmark(bookmark);
+            Get.back();
+          },
+          child: Text(bookmark.title, style: const TextStyle(fontSize: 14)),
+        ),
+        children: List.generate(bookmark.count, (i) => _buildBookmarkItem(bookmark[i])),
+      );
+    } else {
+      return ListTile(
+        title: Text(bookmark.title, style: const TextStyle(fontSize: 14)),
+        onTap: () {
+          controller.jumpToBookmark(bookmark);
+          Get.back();
+        },
+      );
+    }
   }
 
   Widget _buildBookmarksList() {

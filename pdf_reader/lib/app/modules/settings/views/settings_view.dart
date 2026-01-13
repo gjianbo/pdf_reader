@@ -17,8 +17,6 @@ class SettingsView extends GetView<SettingsController> {
         children: [
           _buildTtsSection(context),
           const Divider(),
-          _buildWebDavSection(context),
-          const Divider(),
           _buildCacheSection(context),
         ],
       ),
@@ -70,71 +68,7 @@ class SettingsView extends GetView<SettingsController> {
     );
   }
 
-  Widget _buildWebDavSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Text('WebDAV 同步', style: Theme.of(context).textTheme.titleMedium),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16.0),
-          child: Column(
-            children: [
-              TextField(
-                controller: controller.webdavUrlCtrl,
-                decoration: const InputDecoration(
-                  labelText: '服务器地址 (URL)',
-                  hintText: 'https://dav.jianguoyun.com/dav/',
-                ),
-              ),
-              TextField(
-                controller: controller.webdavUserCtrl,
-                decoration: const InputDecoration(labelText: '用户名'),
-              ),
-              TextField(
-                controller: controller.webdavPasswordCtrl,
-                decoration: const InputDecoration(labelText: '密码'),
-                obscureText: true,
-              ),
-              Obx(() => SwitchListTile(
-                title: const Text('自动同步'),
-                subtitle: const Text('应用切后台时自动备份'),
-                value: controller.settings.webdavAutoSync.value,
-                onChanged: (val) => controller.settings.webdavAutoSync.value = val,
-                contentPadding: EdgeInsets.zero,
-              )),
-              const SizedBox(height: 10),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  ElevatedButton(
-                    onPressed: controller.saveWebDavSettings,
-                    child: const Text('保存配置'),
-                  ),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.cloud_upload),
-                        tooltip: '备份到云端',
-                        onPressed: controller.backup,
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.cloud_download),
-                        tooltip: '从云端恢复',
-                        onPressed: controller.restore,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
+
 
   Widget _buildCacheSection(BuildContext context) {
     return Column(

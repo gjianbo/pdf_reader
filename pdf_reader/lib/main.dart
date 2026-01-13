@@ -7,8 +7,6 @@ import 'app/modules/bookshelf/views/bookshelf_view.dart';
 import 'app/services/database_service.dart';
 import 'app/services/settings_service.dart';
 import 'app/services/cache_service.dart';
-import 'app/services/webdav_service.dart';
-import 'app/services/tts_service.dart';
 
 Future<void> main() async {
   // 初始化绑定
@@ -18,7 +16,11 @@ Future<void> main() async {
   // 初始化后台播放服务
   debugPrint('App Start: Initializing JustAudioBackground...');
   try {
-    await TtsService.ensureBackgroundInitialized();
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.hnwd.pdf_reader.channel.audio',
+      androidNotificationChannelName: 'PDF Reader Audio',
+      androidNotificationOngoing: true,
+    );
     debugPrint('App Start: JustAudioBackground initialized');
   } catch (e) {
     debugPrint('App Start: JustAudioBackground init failed (non-fatal): $e');
@@ -37,9 +39,8 @@ Future<void> main() async {
   debugPrint('App Start: DatabaseService initialized');
 
   // 初始化其他服务
-  debugPrint('App Start: Initializing CacheService & WebDavService...');
+  debugPrint('App Start: Initializing CacheService...');
   Get.put(CacheService());
-  await Get.putAsync(() => WebDavService().init());
   
   // TtsService 和 BookshelfController 将在 InitialBinding 中初始化
   
@@ -60,6 +61,8 @@ class MyApp extends StatelessWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
       ),
+      darkTheme: ThemeData.dark(),
+      themeMode: ThemeMode.system,
       home: const BookshelfView(),
     );
   }

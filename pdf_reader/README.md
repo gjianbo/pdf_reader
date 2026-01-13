@@ -24,9 +24,7 @@
 - **定时关闭**: 支持睡眠定时器，伴你入睡。
 
 ### ☁️ 云端同步
-- **WebDAV 协议**: 标准化的 WebDAV 支持（已适配坚果云、Nextcloud 等）。
-- **全量同步**: 自动同步书架列表、阅读进度和图书文件。
-- **跨设备**: 在不同设备间无缝切换阅读状态。
+(此功能已移除)
 
 ### 📦 极简书架
 - **自动扫描**: 智能识别设备中的文档文件。
@@ -44,7 +42,7 @@
 - **状态管理**: GetX (Reactive State Management)
 - **依赖注入**: GetX Bindings
 - **本地数据库**: Isar (高性能 NoSQL，用于存储图书元数据和进度)
-- **网络层**: Dio / WebDAV Client
+- **网络层**: Dio
 - **音频服务**: Just Audio + Audio Service (支持后台播放)
 - **解析引擎**: 
   - PDF: `syncfusion_flutter_pdfviewer`
@@ -63,10 +61,9 @@ lib/
 │   │   ├── reader/      # 阅读器核心
 │   │   └── settings/    # 设置页面
 │   ├── services/        # 全局后台服务
-│   │   ├── database_service.dart # 数据库封装
-│   │   ├── tts_service.dart      # 语音合成服务
-│   │   ├── webdav_service.dart   # 云同步服务
-│   │   └── ...
+  │   ├── database_service.dart # 数据库封装
+  │   ├── tts_service.dart      # 语音合成服务
+  │   └── ...
 │   ├── routes/          # 路由定义
 │   └── utils/           # 工具类
 ├── main.dart            # 应用入口
@@ -117,12 +114,6 @@ lib/
 ---
 
 ## ⚙️ 配置指南
-
-### WebDAV 设置
-1. 进入 **设置 -> 数据同步**。
-2. 填写 WebDAV 服务器地址（如 `https://dav.jianguoyun.com/dav/`）。
-3. 填写用户名和**应用密码**（注意：不是登录密码）。
-4. 点击“立即同步”测试连接。
 
 ### TTS 设置
 1. 进入 **设置 -> 听书设置**。

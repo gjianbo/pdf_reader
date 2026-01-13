@@ -66,11 +66,6 @@ class SettingsService extends GetxService {
     ever(orientationMode, (v) => _prefs.setInt('orientationMode', v));
     ever(landscapeScrollMode, (v) => _prefs.setInt('landscapeScrollMode', v));
 
-    ever(webdavUrl, (v) => _prefs.setString('webdavUrl', v));
-    ever(webdavUser, (v) => _prefs.setString('webdavUser', v));
-    ever(webdavPassword, (v) => _prefs.setString('webdavPassword', v));
-    ever(webdavAutoSync, (v) => _prefs.setBool('webdavAutoSync', v));
-
     return this;
   }
 }
