@@ -55,6 +55,17 @@ class SettingsView extends GetView<SettingsController> {
           max: 2.0,
           onChanged: (val) => controller.settings.ttsPitch.value = val,
         )),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: controller.testEdgeTts,
+              icon: const Icon(Icons.volume_up),
+              label: const Text('测试语音 (Edge TTS)'),
+            ),
+          ),
+        ),
       ],
     );
   }

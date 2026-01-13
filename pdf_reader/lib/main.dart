@@ -11,25 +11,38 @@ import 'app/services/webdav_service.dart';
 Future<void> main() async {
   // 初始化绑定
   WidgetsFlutterBinding.ensureInitialized();
+  debugPrint('App Start: WidgetsFlutterBinding initialized');
   
   // 初始化后台播放服务
-  await JustAudioBackground.init(
-    androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
-    androidNotificationChannelName: 'Audio playback',
-    androidNotificationOngoing: true,
-  );
+  debugPrint('App Start: Initializing JustAudioBackground...');
+  try {
+    await JustAudioBackground.init(
+      androidNotificationChannelId: 'com.ryanheise.bg_demo.channel.audio',
+      androidNotificationChannelName: 'Audio playback',
+      androidNotificationOngoing: true,
+    );
+    debugPrint('App Start: JustAudioBackground initialized');
+  } catch (e) {
+    debugPrint('App Start: JustAudioBackground error: $e');
+  }
 
   // 初始化设置服务
+  debugPrint('App Start: Initializing SettingsService...');
   await Get.putAsync(() => SettingsService().init());
+  debugPrint('App Start: SettingsService initialized');
 
   // 初始化数据库服务
+  debugPrint('App Start: Initializing DatabaseService...');
   final dbService = DatabaseService();
   await dbService.init();
   Get.put(dbService); // 注入全局
+  debugPrint('App Start: DatabaseService initialized');
 
   // 初始化其他服务
+  debugPrint('App Start: Initializing CacheService & WebDavService...');
   Get.put(CacheService());
   await Get.putAsync(() => WebDavService().init());
+  debugPrint('App Start: All services initialized, calling runApp');
 
   runApp(const MyApp());
 }
