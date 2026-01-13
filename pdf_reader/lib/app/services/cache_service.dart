@@ -1,68 +1,47 @@
 import 'dart:io';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:get/get.dart';
 import 'package:path_provider/path_provider.dart';
 
 class CacheService extends GetxService {
-  
-  @override
-  void onInit() {
-    super.onInit();
-    // 启动时自动清理过期缓存
-    autoClean();
-  }
-  
-  /// 获取缓存大小 (格式化字符串)
+  // 1. 使用自定义 Config，避免与 DefaultCacheManager 的 libCachedImageData.db 冲突
+  final CacheManager _cacheManager = CacheManager(
+    Config(
+      'custom_pdf_reader_cache_v1', // 唯一的 Key，会生成新的数据库文件
+      stalePeriod: const Duration(days: 7),
+      maxNrOfCacheObjects: 200,
+      repo: JsonCacheInfoRepository(databaseName: 'custom_pdf_reader_cache_v1'),
+      fileService: HttpFileService(),
+    ),
+  );
+
   Future<String> getCacheSize() async {
-    int totalSize = 0;
     try {
       final tempDir = await getTemporaryDirectory();
-      final ttsCacheDir = Directory("${tempDir.path}/tts_cache");
+      final dir = Directory("${tempDir.path}/custom_pdf_reader_cache_v1"); // 猜测的路径
       
-      if (ttsCacheDir.existsSync()) {
-         await for (var file in ttsCacheDir.list(recursive: true, followLinks: false)) {
-           if (file is File) {
-             totalSize += await file.length();
-           }
-         }
+      if (await dir.exists()) {
+        int totalSize = 0;
+        await for (var file in dir.list(recursive: true, followLinks: false)) {
+          if (file is File) {
+            totalSize += await file.length();
+          }
+        }
+        return _formatSize(totalSize);
       }
-    } catch (e) {
       return "0 B";
+    } catch (e) {
+      return "Error";
     }
-    
-    return _formatSize(totalSize);
   }
 
-  /// 一键清理缓存
   Future<void> clearCache() async {
-     final tempDir = await getTemporaryDirectory();
-     final ttsCacheDir = Directory("${tempDir.path}/tts_cache");
-     if (ttsCacheDir.existsSync()) {
-       await ttsCacheDir.delete(recursive: true);
-     }
-  }
-  
-  /// 自动清理过期缓存 (7天前)
-  Future<void> autoClean() async {
-     final tempDir = await getTemporaryDirectory();
-     final ttsCacheDir = Directory("${tempDir.path}/tts_cache");
-     if (ttsCacheDir.existsSync()) {
-        final now = DateTime.now();
-        await for (var file in ttsCacheDir.list(recursive: false)) {
-           if (file is File) {
-             final stat = await file.stat();
-             if (now.difference(stat.modified).inDays > 7) {
-               await file.delete();
-             }
-           }
-        }
-     }
+    await _cacheManager.emptyCache();
   }
 
   String _formatSize(int bytes) {
-    if (bytes <= 0) return "0 B";
     if (bytes < 1024) return "$bytes B";
-    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(2)} KB";
-    if (bytes < 1024 * 1024 * 1024) return "${(bytes / (1024 * 1024)).toStringAsFixed(2)} MB";
-    return "${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB";
+    if (bytes < 1024 * 1024) return "${(bytes / 1024).toStringAsFixed(1)} KB";
+    return "${(bytes / 1024 / 1024).toStringAsFixed(1)} MB";
   }
 }
