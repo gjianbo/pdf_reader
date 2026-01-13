@@ -2,16 +2,17 @@ import 'dart:io';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:get/get.dart';
-import 'package:just_audio/just_audio.dart';
 import 'package:edge_tts_dart/edge_tts_dart.dart';
 import 'package:pdf_reader/app/services/settings_service.dart';
 import 'package:pdf_reader/app/services/cache_service.dart';
 import 'package:pdf_reader/app/services/webdav_service.dart';
+import 'package:pdf_reader/app/services/tts_service.dart';
 
 class SettingsController extends GetxController {
   final SettingsService settings = Get.find();
   final CacheService _cacheService = Get.find();
   final WebDavService _webDavService = Get.find();
+  final TtsService _ttsService = Get.find<TtsService>(); // 复用 TtsService
 
   // WebDAV Text Controllers
   final webdavUrlCtrl = TextEditingController();
@@ -21,7 +22,9 @@ class SettingsController extends GetxController {
   final RxString cacheSize = "Calculating...".obs;
   
   // Test Player
-  final AudioPlayer _testPlayer = AudioPlayer();
+  // 不再在 SettingsController 中维护单独的 AudioPlayer，
+  // 而是复用 TtsService 的单例，避免 just_audio_background 的多实例冲突。
+  // final AudioPlayer _testPlayer = AudioPlayer(); // Removed
 
   @override
   void onInit() {
@@ -35,7 +38,7 @@ class SettingsController extends GetxController {
   
   @override
   void onClose() {
-    _testPlayer.dispose();
+    // _testPlayer.dispose(); // Removed
     webdavUrlCtrl.dispose();
     webdavUserCtrl.dispose();
     webdavPasswordCtrl.dispose();
@@ -125,9 +128,23 @@ class SettingsController extends GetxController {
         if (await file.exists()) {
           debugPrint("EdgeTTS Test: File exists, size: ${await file.length()} bytes");
           
-          await _testPlayer.setFilePath(filePath);
-          await _testPlayer.play();
-          debugPrint("EdgeTTS Test: Playing started");
+          // 注意：just_audio_background 需要在 init 之后才能使用 AudioSource.uri/file 并且带 tag
+          // 如果没有 tag，默认行为取决于配置。
+          // 这里的错误 Field '_audioHandler' has not been initialized 是因为 JustAudioBackground.init 还没完成
+          // 或者我们在非后台模式下错误地触发了后台逻辑。
+          
+          // 对于简单的测试播放，我们不需要后台控制，可以尝试不使用 tag，
+          // 但 setFilePath 默认会尝试使用 AudioSource.file
+          
+          try {
+            // 调用 TtsService 的测试播放方法
+            // 测试模式下关闭后台服务支持，避免因初始化问题导致无法试听
+            await _ttsService.playAudioFile(file, useBackground: false);
+            debugPrint("EdgeTTS Test: Playing started");
+          } catch (playerError) {
+             debugPrint("EdgeTTS Test Player Error: $playerError");
+             throw Exception("播放器初始化失败: $playerError");
+          }
         } else {
           throw Exception("生成的音频文件不存在");
         }

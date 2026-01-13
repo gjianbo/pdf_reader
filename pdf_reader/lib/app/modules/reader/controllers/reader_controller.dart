@@ -29,7 +29,7 @@ class ReaderController extends GetxController with WidgetsBindingObserver {
   final EpubParserService _epubParser = EpubParserService();
   final TxtParserService _txtParser = TxtParserService();
   final PaginationService _paginationService = PaginationService();
-  final TtsService _ttsService = Get.put(TtsService()); // 确保单例
+  final TtsService _ttsService = Get.find<TtsService>(); // 使用全局单例
   final DatabaseService _dbService = Get.find<DatabaseService>();
   final SettingsService settings = Get.find<SettingsService>();
   final GoogleTranslator _translator = GoogleTranslator();
@@ -268,47 +268,56 @@ class ReaderController extends GetxController with WidgetsBindingObserver {
   /// 加载图书
   Future<void> _loadBook() async {
     try {
-      isLoading.value = true;
+      // 仅对非 PDF 格式显示全局 Loading，因为 PDF Viewer 自带加载且需要快速显示
+      if (book.format != BookFormat.pdf) {
+        isLoading.value = true;
+      }
       
       if (book.format == BookFormat.pdf) {
-        // 1. PDF 提取文本
-        sentences.value = await _pdfService.extractText(book.filePath);
+        // 1. PDF 提取文本 (异步执行，不阻塞 UI)
+        _pdfService.extractText(book.filePath).then((result) {
+          if (isClosed) return;
+          sentences.value = result;
+          _onTextExtracted();
+        }).catchError((e) {
+          debugPrint('PDF 文本提取失败: $e');
+          Get.snackbar('提示', '未能提取到文本，可能是图片型 PDF');
+        });
       } else if (book.format == BookFormat.epub) {
         // 2. EPUB 解析
         universalBook = await _epubParser.parse(book.filePath);
         _processUniversalBook();
+        _onTextExtracted();
       } else if (book.format == BookFormat.txt) {
         // 3. TXT 解析
         universalBook = await _txtParser.parse(book.filePath);
         _processUniversalBook();
-      }
-      
-      if (sentences.isNotEmpty) {
-        // 2. 恢复进度
-        if (book.lastSentenceIndex < sentences.length) {
-          currentIndex.value = book.lastSentenceIndex;
-        } else {
-          currentIndex.value = 0;
-        }
-
-        // 3. 跳转逻辑
-        // PDF 在 onDocumentLoaded 处理
-        // EPUB 需要在这里或者 UI 构建时处理
-        
-        // 4. 设置 TTS 播放列表
-        _ttsService.setPlaylist(sentences, currentIndex.value);
-      } else {
-        if (book.format == BookFormat.pdf) {
-           Get.snackbar('提示', '未能提取到文本，可能是图片型 PDF');
-        } else if (book.format == BookFormat.epub) {
-           Get.snackbar('提示', 'EPUB 解析为空');
-        }
+        _onTextExtracted();
       }
     } catch (e) {
       Get.snackbar('错误', '解析图书失败: $e');
       debugPrint('$e');
     } finally {
       isLoading.value = false;
+    }
+  }
+
+  /// 文本提取完成后的回调
+  void _onTextExtracted() {
+    if (sentences.isNotEmpty) {
+      // 2. 恢复进度
+      if (book.lastSentenceIndex < sentences.length) {
+        currentIndex.value = book.lastSentenceIndex;
+      } else {
+        currentIndex.value = 0;
+      }
+
+      // 4. 设置 TTS 播放列表
+      _ttsService.setPlaylist(sentences, currentIndex.value);
+    } else {
+      if (book.format == BookFormat.epub) {
+         Get.snackbar('提示', 'EPUB 解析为空');
+      }
     }
   }
   

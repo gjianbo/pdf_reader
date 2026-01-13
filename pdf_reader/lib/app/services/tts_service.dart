@@ -5,6 +5,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:get/get.dart';
 import 'package:just_audio/just_audio.dart';
+import 'package:just_audio_background/just_audio_background.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:edge_tts_dart/edge_tts_dart.dart';
@@ -13,6 +14,43 @@ import 'settings_service.dart';
 enum TtsState { playing, paused, stopped, loading, error }
 
 class TtsService extends GetxService {
+  static Completer<void>? _backgroundInitCompleter;
+  static bool isBackgroundInitialized = false;
+
+  /// 确保 just_audio_background 已完成初始化
+  ///
+  /// 避免在未调用初始化时触发 `LateInitializationError: Field '_audioHandler' has not been initialized`。
+  static Future<void> ensureBackgroundInitialized() async {
+    if (isBackgroundInitialized) return;
+    
+    final existing = _backgroundInitCompleter;
+    if (existing != null) return existing.future;
+
+    final completer = Completer<void>();
+    _backgroundInitCompleter = completer;
+
+    debugPrint('TtsService: Starting JustAudioBackground initialization...');
+    try {
+      await JustAudioBackground.init(
+        androidNotificationChannelId: 'com.hnwd.pdf_reader.channel.audio',
+        androidNotificationChannelName: 'PDF Reader Audio',
+        androidNotificationOngoing: true,
+      );
+      isBackgroundInitialized = true;
+      debugPrint('TtsService: JustAudioBackground initialized successfully');
+      completer.complete();
+    } catch (e, st) {
+      debugPrint('TtsService: JustAudioBackground init failed: $e');
+      // 如果初始化失败，不要标记为 true，也不要吞掉异常，
+      // 否则后续调用会因为 _audioHandler 未初始化而崩溃。
+      _backgroundInitCompleter = null;
+      completer.completeError(e, st);
+      // 这里不 rethrow，因为我们在 main.dart 里面调用时不想阻断 App 启动，
+      // 但调用者需要检查 isBackgroundInitialized 状态。
+      // 不过，为了让等待这个 Future 的调用者知道失败了，completeError 是必须的。
+    }
+  }
+
   final SettingsService _settings = Get.find<SettingsService>();
   
   // Players
@@ -48,6 +86,15 @@ class TtsService extends GetxService {
     // _initEdgeTts(); // Not needed as we create instance on demand
     _initFlutterTts();
     _initAudioPlayer();
+  }
+
+  @override
+  void onClose() {
+    _audioPlayer.dispose();
+    _flutterTts.stop();
+    _sleepTimer?.cancel();
+    _completionController.close();
+    super.onClose();
   }
 
 /*
@@ -159,8 +206,25 @@ class TtsService extends GetxService {
   Future<void> _playOnline(String text) async {
     String? filePath = await _getOrDownloadAudio(text);
     if (filePath != null && File(filePath).existsSync()) {
-      await _audioPlayer.setFilePath(filePath);
-      await _audioPlayer.play();
+      try {
+        // 使用 AudioSource.file 并附带 MediaItem 以支持后台播放显示
+        await _audioPlayer.setAudioSource(
+          AudioSource.file(
+            filePath,
+            tag: MediaItem(
+              id: _generateCacheKey(text), // 使用缓存 Key 作为 ID
+              album: "PDF Reader TTS",
+              title: text.length > 20 ? "${text.substring(0, 20)}..." : text,
+              artUri: null,
+            ),
+          ),
+          preload: true,
+        );
+        await _audioPlayer.play();
+      } catch (e) {
+        debugPrint("JustAudio setAudioSource failed: $e. Maybe JustAudioBackground is not initialized yet or file error.");
+        rethrow;
+      }
     } else {
       throw Exception("Audio file not found or download failed");
     }
@@ -198,6 +262,37 @@ class TtsService extends GetxService {
     _sleepTimer?.cancel();
     sleepMinutesLeft.value = 0;
     _stopAtIndex = null;
+  }
+
+  /// 播放指定的音频文件 (用于测试)
+  /// 复用 _audioPlayer 以避免多实例冲突
+  /// [useBackground] 是否启用后台播放控制 (Notification/LockScreen)。测试播放建议设为 false。
+  Future<void> playAudioFile(File file, {bool useBackground = true}) async {
+    // 停止当前正在播放的内容
+    await stop();
+    
+    // 服保始化，即use，即使 useBackground 为 false，Background 为 false，
+    // 因为 j为 t_audio_bst_audio_ 插件一旦注册，可能需要a_audioHandlerkground 插件一旦注册，可能需要 _audioHandler
+  await ensureBackgroundInitialized();
+    try {
+      await _audioPlayer.setAudioSource(
+        AudioSource.file(
+          file.path,
+          // 如果不启用后台，tag 设为 null
+          tag: useBackground ? MediaItem(
+            id: 'test_tts_${DateTime.now().millisecondsSinceEpoch}',
+            album: 'TTS Test',
+            title: '测试语音',
+            artUri: null,
+          ) : null,
+        ),
+        preload: true,
+      );
+      await _audioPlayer.play();
+    } catch (e) {
+      debugPrint("TtsService.playAudioFile failed: $e");
+      rethrow;
+    }
   }
 
   /// 预加载逻辑
@@ -317,14 +412,5 @@ class TtsService extends GetxService {
     } catch (e) {
       debugPrint("Clear cache error: $e");
     }
-  }
-
-  @override
-  void onClose() {
-    _audioPlayer.dispose();
-    _flutterTts.stop();
-    _completionController.close();
-    _sleepTimer?.cancel();
-    super.onClose();
   }
 }

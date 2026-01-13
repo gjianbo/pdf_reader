@@ -84,6 +84,8 @@ class ReaderView extends GetView<ReaderController> {
       children: [
         SfPdfViewer.file(
           File(book.filePath),
+          key: Key(book.filePath), // 确保状态刷新
+          canShowScrollHead: false, // 禁用滚动头以优化性能 (避免预计算所有页面高度)
           controller: controller.pdfViewerController,
           currentSearchTextHighlightColor: Colors.yellow.withValues(alpha: 0.6),
           otherSearchTextHighlightColor: Colors.yellow.withValues(alpha: 0.3),

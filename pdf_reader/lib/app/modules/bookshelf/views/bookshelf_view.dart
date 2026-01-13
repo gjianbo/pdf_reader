@@ -11,10 +11,7 @@ class BookshelfView extends GetView<BookshelfController> {
 
   @override
   Widget build(BuildContext context) {
-    // 确保 Controller 被注入
-    if (!Get.isRegistered<BookshelfController>()) {
-      Get.put(BookshelfController());
-    }
+    // Controller 已通过 Binding 注入，无需手动 put
 
     return Scaffold(
       appBar: AppBar(
